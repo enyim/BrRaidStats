@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+	"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+	<style>
+		td label { display: block; width: 24px; height: 24px; margin: 0px auto; border: none; padding: 0;}
+		
+		td label.attended { background: url(yes.png); }
+		td label.skipped { background: url(no.png); }
+
+		td label.state-accepted  { border: none; background-position: -48px 0; }
+		td label.state-invited   { border: none; background-position: -72px 0; }
+		td label.state-declined  { border: none; background-position:   0px 0; }
+		td label.state-tentative { border: none; background-position: -24px 0; }
+		td label.state-unknown   { border: none; background-position: -96px 0; }
+		
+		body, table, td, label { font: normal 10pt "Helvetica Neue", Helvetica, Arial, sans-serif;}
+		td { padding: 2px; }
+		table#AttendanceTable thead td { font-size: 7pt;}
+		table#AttendanceTable tr:nth-child(2n+1) { background: #eee;}
+
+		table#AttendanceTable tr.highlight { background: #689ad7;}
+
+		table#Legend { margin-bottom: 1em;}
+		table#Legend, table#Legend td { border: 1px solid #eee; }
+		table#Legend tbody tr td:nth-child(1),
+		table#Legend tbody tr:nth-child(1) td { font-size: 8pt; background: #eee;}
+		
+		#HideLegend, #Legend { display: none; }
+		
+	</style>
+	<title>BR :: Attendance Grid</title>
+</head>
+
+<body>
+<p><a href="#" id="ShowLegend">Show Legend</a><a href="#" id="HideLegend">Hide Legend</a></p>
+	<table id="Legend">
+	<tbody><tr><td></td><td>Accepted</td><td>Declined</td><td>Tentative</td><td>Invited</td><td>NoCal</td></tr>
+	<tr><td>Attended</td>
+	<td><label class="state state-accepted attended"></label></td>
+	<td><label class="state state-declined attended"></label></td>
+	<td><label class="state state-tentative attended"></label></td>
+	<td><label class="state state-invited attended"></label></td>
+	<td><label class="state state-unknown attended"></label></td>
+	</tr>			
+	<tr><td>Skipped</td>
+	<td><label class="state state-accepted skipped"></label></td>
+	<td><label class="state state-declined skipped"></label></td>
+	<td><label class="state state-tentative skipped"></label></td>
+	<td><label class="state state-invited skipped"></label></td>
+	<td><label class="state state-unknown skipped"></label></td>
+	</tr>			
+	</tbody>
+	</table>
+	
+	<table id="AttendanceTable" cellpadding="0" cellspacing="0"></table>
+</body>
+<script src="http://code.jquery.com/jquery-1.4.3.min.js" type="text/javascript" charset="utf-8"></script>
+<script src="db.js" type="text/javascript" charset="utf-8"></script>
+<script src="linq.min.js" type="text/javascript" charset="utf-8"></script>
+<script type="text/javascript">
+	$(function()
+	{
+		var $tag = function (name) { return $("<" + name + "></" + name + ">"); }
+		var EF = function (x) { return Enumerable.From(x); };
+		
+		var $T = $("#AttendanceTable").empty();
+		var $TH = $tag("thead").appendTo($T);
+		var $TB = $tag("tbody").appendTo($T);
+		
+		var dates = EF(ATT_byDate).Select("$.Key").ToArray();
+		var $tr = $tag("tr").appendTo($TH).append($tag("td")).append($tag("td"));
+		
+		EF(dates).
+			Select(function(x) { var dt = new Date(x); return (dt.getMonth() + 1) + "/" + dt.getDate()}).
+			ForEach(function(x) { $tag("td").text(x).appendTo($tr); });
+			
+		var attendanceByName = EF(DB.Attendance).
+			GroupBy("$.name").
+			ToObject(function(x) { return x.Key(); }, 
+						function(x) { return EF(x).ToObject(function(a) { return a.date; }, function(b) { return true; }); });
+		
+		var calendarByName = EF(DB.Calendar).
+			GroupBy("$.name").
+			ToObject(function(x) { return x.Key(); }, 
+						function(x) { return EF(x).ToObject(function(a) { return a.date; }, function(b) { return b.state; }); });
+
+		EF(attendanceByName).
+			Select("$.Key").
+			Concat(EF(calendarByName).Select("$.Key")).
+			Distinct().
+			OrderBy().
+			ForEach(function(n, idx)
+			{
+				var $tr = $tag("tr").appendTo($TH).append($tag("td").text(idx + 1)).append($tag("td").text(n));
+				
+				EF(dates).ForEach(function(d)
+				{
+					var attInfo = attendanceByName[n], inviteInfo = calendarByName[n];
+					var attended = attInfo ? !!attInfo[d] : false;
+					var state = inviteInfo ? inviteInfo[d] : "unknown";
+					var label = $tag("label").addClass("state");
+
+					state && label.addClass("state-" + state.toLowerCase());
+					label.addClass(attended ? "attended" : "skipped");
+
+					$tr.append($tag("td").addClass("cal").append(label));
+				});
+
+				$TB.append($tr);
+			});
+			
+		$("#ShowLegend").click(function() { $("#Legend").show(); $(this).hide(); $("#HideLegend").show(); return false; });
+		$("#HideLegend").click(function() { $("#Legend").hide(); $(this).hide(); $("#ShowLegend").show(); return false; });
+		
+		$T.delegate("td", "click", function(e) {
+			if (e.button == 0)
+			{
+				if (!e.shiftKey)
+					$T.find("tr.highlight").removeClass("highlight");
+					$(this).closest("tr").addClass("highlight");
+				
+				e.preventDefault(); e.stopPropagation();
+				return false;
+			}
+		});
+	});
+</script>
+</html>

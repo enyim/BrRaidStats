@@ -5,124 +5,168 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
 <head>
 	<style>
-		body, table, td, label { font: normal 10pt "Helvetica Neue", Helvetica, Arial, sans-serif;}
-	
-		td { padding: 2px; }
-		table#AttendanceTable thead td { font-size: 8pt;}
-		table#AttendanceTable tr:nth-child(2n+1) { background: #eee;}
-	
-		tr.state-warn td { background: #9e0000; color: #fff; }
-		tr.state-lazy  td { background: #9e0000; color: #fff; }
-		tr.state-missing  td { background: #9e0000; color: #fff; }
-		#Left { float: left; margin: 0 1em 0 0;}
-		#Right { float: left; }
-		.clear { clear: both; }
-		tr.highlight td { background: #689ad7 !important;}
-		table td { margin: 2px; }
+		td label { display: block; width: 24px; height: 24px; margin: 0px auto; border: none; padding: 0;}
 		
+		td { position: relative; }
+		td label.attended { background: url(img/yes.png); }
+		td label.skipped { background: url(img/no.png); }
+
+		td label.state-accepted  { border: none; background-position: -48px 0; }
+		td label.state-invited   { border: none; background-position: -72px 0; }
+		td label.state-declined  { border: none; background-position:   0px 0; }
+		td label.state-tentative { border: none; background-position: -24px 0; }
+		td label.state-unknown   { border: none; background-position: -96px 0; }
+		td label.has-loot, #LegendPH label.has-loot { background-color: #c4c4ff; -webkit-border-radius: 4px; -moz-border-radius: 4px; border-radius: 4px; }
+		#LegendPH .has-loot { padding: 4px; }
+		
+		body, table, td, label { font: normal 10pt "Helvetica Neue", Helvetica, Arial, sans-serif;}
+		td { padding: 2px; }
+		table#AttendanceTable thead td { font-size: 7pt;}
+		table#AttendanceTable tr:nth-child(2n+1) { background: #eee;}
+
+		table#AttendanceTable tr.highlight { background: #689ad7;}
+
+		table#Legend { margin-bottom: 1em;}
+		table#Legend, table#Legend td { border: 1px solid #eee; }
+		table#Legend tbody tr td:nth-child(1),
+		table#Legend tbody tr:nth-child(1) td { font-size: 8pt; background: #eee;}
+		
+		#HideLegend, #LegendPH, div.loot-container { display: none; }
 		#Nav { background: #f4f4f4; padding: 4px; margin: 0 0 2em 0; }
+		
+		div.loot-container
+		{
+			position: absolute;
+			padding: 4px;
+			border: 2px solid #ccc;
+			background: #d3e7ff;
+		}
 	</style>
-	<title>BR :: Attendance Stats</title>
+	<title>BR :: Attendance Grid</title>
 </head>
 
 <body>
-	<div id="Nav">[ Calendar Stats ] | <a href="grid.htm">Raid Stats</a></div>
+<div id="Nav"><a href="stats.htm">Calendar Stats</a> | [ Raid Stats ]</div>
 	
-	<div id="Left">
-		<table id="AttendanceTable" cellpadding="0" cellspacing="0">
-			<thead><tr><td>name</td><td>raid?</td><td>calendar</td></tr></thead>
-			<tbody></tbody>
-		</table>
-	</div>
-	<div id="Right">
-	<select id="RaidList" style="width: 200px;"></select>
-	<div id="C"></div>
-</div>
-<br class="clear" />
+<p><a href="#" id="ShowLegend">Show Legend</a><a href="#" id="HideLegend">Hide Legend</a></p>
+<div id="LegendPH">
+	<table id="Legend">
+	<tbody><tr><td></td><td>Accepted</td><td>Declined</td><td>Tentative</td><td>Invited</td><td>NoCal</td></tr>
+	<tr><td>Attended</td>
+	<td><label class="state state-accepted attended"></label></td>
+	<td><label class="state state-declined attended"></label></td>
+	<td><label class="state state-tentative attended"></label></td>
+	<td><label class="state state-invited attended"></label></td>
+	<td><label class="state state-unknown attended"></label></td>
+	</tr>			
+	<tr><td>Skipped</td>
+	<td><label class="state state-accepted skipped"></label></td>
+	<td><label class="state state-declined skipped"></label></td>
+	<td><label class="state state-tentative skipped"></label></td>
+	<td><label class="state state-invited skipped"></label></td>
+	<td><label class="state state-unknown skipped"></label></td>
+	</tr>			
+	</tbody>
+	</table>
+	<p><label class="has-loot">Has Loot</label> (click cell for details)</p>
+</div>	
+	<table id="AttendanceTable" cellpadding="0" cellspacing="0"></table>
 </body>
-
 <script src="http://code.jquery.com/jquery-1.4.3.min.js" type="text/javascript" charset="utf-8"></script>
+<script type="text/javascript" src="http://static.wowhead.com/widgets/power.js"></script>
 <script src="js/linq.min.js" type="text/javascript" charset="utf-8"></script>
 <script src="js/db.js" type="text/javascript" charset="utf-8"></script>
-<script src="js/raphael.js" type="text/javascript" charset="utf-8"></script>
-<script src="js/g.raphael-min.js" type="text/javascript" charset="utf-8"></script>
-<script src="js/g.pie-min.js" type="text/javascript" charset="utf-8"></script>
-<script>
-	var colors = { "Accepted": "#517700", "Tentative": "#e98e38", "Invited": "#0977b3", "Declined": "#69001f"};
-	$(function(){
+<script type="text/javascript">
+	$(function()
+	{
+		var $T = $("#AttendanceTable").empty();
+		var $TH = $tag("thead").appendTo($T);
+		var $TB = $tag("tbody").appendTo($T);
 		
-		var $R = new Raphael($("#C")[0], 340, 240), $rl = $("#RaidList").empty(), pie, $tbody;
-		EF(CAL_byDate).Reverse().ForEach(function(x) { $("<option>" + x.Key + "</option>").attr("value", x.Key).appendTo($rl); });
-
-		var guessLabel = function(t) { return $(t.label[1].node).text().split(/\s+/ig)[1]; };		
-		var pieHoverIn = function()
-		{
-			this.sector.stop();
-			this.sector.scale(1.1, 1.1, this.cx, this.cy);
-
-			$tbody.find("tr.highlight").removeClass("highlight");
+		var dates = EF(ATT_byDate).Select("$.Key").ToArray();
+		var $tr = $tag("tr").appendTo($TH).append($tag("td")).append($tag("td"));
+		
+		EF(dates).
+			Select(function(x) { var dt = new Date(x); return (dt.getMonth() + 1) + "/" + dt.getDate()}).
+			ForEach(function(x) { $tag("td").text(x).appendTo($tr); });
 			
-			if (this.label)
+		var attendanceByName = EF(DB.Attendance).
+			GroupBy("$.name").
+			ToObject(function(x) { return x.Key(); }, 
+						function(x) { return EF(x).ToObject(function(a) { return a.date; }, function(b) { return true; }); });
+		
+		var calendarByName = EF(DB.Calendar).
+			GroupBy("$.name").
+			ToObject(function(x) { return x.Key(); }, 
+						function(x) { return EF(x).ToObject(function(a) { return a.date; }, function(b) { return b.state; }); });
+
+		EF(attendanceByName).
+			Select("$.Key").
+			Concat(EF(calendarByName).Select("$.Key")).
+			Distinct().
+			OrderBy().
+			ForEach(function(n, idx)
 			{
-				this.label[0].stop();
-				this.label[0].scale(1.5);
-				this.label[1].attr({"font-weight": 800});
+				var $tr = $tag("tr").appendTo($TH).append($tag("td").text(idx + 1)).append($tag("td").text(n));
 				
-				$tbody.find("tr.state-" + guessLabel(this).toLowerCase()).addClass("highlight");
-			}
-		};
-		var pieHoverOut = function ()
-		{
-			$tbody.find("tr.highlight").removeClass("highlight");
-			this.sector.animate({scale: [1, 1, this.cx, this.cy]}, 500, "bounce");
-		
-			if (this.label)
-			{
-				this.label[0].animate({scale: 1}, 500, "bounce");
-				this.label[1].attr({"font-weight": 400});
-			}
-		};
-		
-		var $tbody = $($("#AttendanceTable").find("tbody:first")[0]).empty();
+				EF(dates).ForEach(function(d)
+				{
+					var attInfo = attendanceByName[n], inviteInfo = calendarByName[n];
+					var attended = attInfo ? !!attInfo[d] : false;
+					var state = inviteInfo ? inviteInfo[d] : "unknown";
+					var label = $tag("label").addClass("state");
 
-		$rl.change(function()
-		{
-			$tbody.empty();
-			if (pie) pie.remove();
-			
-			var date = $rl.find(":selected").attr("value");
-			var source = Enumerable.From(CAL_byDate[date]).GroupBy("$.state").Select(function(x) { return { state: x.Key(), count: Enumerable.From(x).Count() }; }).ToArray();
-			var data = EF(source).OrderBy(function(x) { return -x.count; });
+					state && label.addClass("state-" + state.toLowerCase());
+					label.addClass(attended ? "attended" : "skipped");
 
-			pie = $R.g.piechart(120, 120, 100, 
-								data.Select(function(x) { return x.count; }).ToArray(),
-								{
-									legend: data.Select(function(x) { return "## " + x.state; }).ToArray(),
-									colors: data.Select(function(x) { return colors[x.state]; }).ToArray()
-								 });
+					var $td = $tag("td").addClass("cal").append(label)
+					$tr.append($td);
+					
+					var loot = LOOT_byDate[d], what;
+					if (loot && (what = loot[n]))
+					{
+						label.addClass("has-loot");
+						label.attr("title", EF(what).Select("$.name").ToArray().join(", "));
+						
+						var $lc = $tag("div").addClass("loot-container").appendTo($td);
+						
+						EF(what).ForEach(function(l)
+						{
+							$tag("div").append($tag("a").
+										attr("href", "http://wowhead.com/item=" + l.id).
+										text(l.name).
+										addClass(l.id == "50274" ? "q5" : "q4")).appendTo($lc);
+						});
+					}
+				});
 
-			pie.hover(pieHoverIn, pieHoverOut);
-			
-			var names = EF(ATT_byDate[date]).Concat(EF(CAL_byDate[date]).Select("$.name")).Distinct().OrderBy().ToArray();
-			var attInfo = EF(ATT_byDate[date]).ToObject("$", function(v) { return true; });
-			var calInfo = EF(CAL_byDate[date]).ToObject("$.name", "$");
-
-			EF(names).ForEach(function(x){
-				var attended = !!attInfo[x];
-				var invState = (calInfo[x]||{}).state;
-				var calendared = invState != "Invited";
-				
-				var $tr = $(["<tr><td>", x, "</td><td>", attended ? "Yes" : "No", "</td><td>", invState || "-", "</td></tr>"].join(""));
-				if (!calendared) $tr.addClass("state-warn");
-				if (!calendared && attended) $tr.addClass("state-lazy");
-				if (!attended && invState == "Accepted") $tr.addClass("state-missing");
-				invState && $tr.addClass("state-" + invState.toLowerCase())
-
-				$tbody.append($tr);
+				$TB.append($tr);
 			});
+			
+		$("#ShowLegend").click(function() { $("#LegendPH").show(); $(this).hide(); $("#HideLegend").show(); return false; });
+		$("#HideLegend").click(function() { $("#LegendPH").hide(); $(this).hide(); $("#ShowLegend").show(); return false; });
+		
+		$T.delegate("label.has-loot", "click", function(e)
+		{
+			$(this).parent().find("div.loot-container").toggle();
+			
+			e.preventDefault(); e.stopPropagation();
+			return false;
 		});
 		
-		$rl.change();
+		$T.delegate("td", "click", function(e) {
+			if (e.button == 0)
+			{
+				var $tr = $(this).closest("tr"), hasH = $tr.is(".highlight");
+				if (!e.shiftKey)
+					$T.find("tr.highlight").removeClass("highlight");
+				
+				!hasH && $tr.addClass("highlight");
+				
+				e.preventDefault(); e.stopPropagation();
+				return false;
+			}
+		});
 	});
 </script>
 </html>

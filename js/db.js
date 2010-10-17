@@ -306,6 +306,20 @@ DB.Attendance = [
 
 ];
 
+DB.Loot = {
+	"October 14 2010": [
+		{ id: "50274", name: "Shadowfrost Shard", target: "Kartacs"  },
+		{ id: "50363", name: "Deathbringer\'s Will", target: "Kartacs"  },
+		{ id: "50274", name: "Shadowfrost Shard", target: "Kartacs"  },
+		{ id: "50688", name: "Nerub\'ar Stalker\'s Cord", target: "Grismon"  },
+		{ id: "50696", name: "Leather of Stitched Scourge Parts", target: "Humzul"  },
+		{ id: "50700", name: "Holiday\'s Grace", target: "Monkk"  },
+		{ id: "50673", name: "Dual-Bladed Pauldrons", target: "Yrkalla"  },
+		{ id: "50679", name: "Helm of the Elder Moon", target: "Humzul"  },
+		{ id: "50685", name: "Trauma", target: "Szutyi"  }
+	]
+};
+
 var stateMap = { "Confirmed" : "Accepted", "Standby" : "Accepted" };
 
 function prepareDb(db, keySelector, itemSelector)
@@ -322,5 +336,17 @@ function prepareDb(db, keySelector, itemSelector)
 	return retval;
 }
 
+var LOOT_byDate = Enumerable.From(DB.Loot).ToObject("$.Key",
+						function(v)
+						{
+							return Enumerable.From(v.Value).
+									GroupBy("$.target").
+									ToObject(function(x) { return x.Key(); }, 
+												function(x) { return x.ToArray(); });
+						});
+						
 var CAL_byDate = prepareDb(DB.Calendar, function(t) { return t.date; }, function (t) { t.state = stateMap[t.state] || t.state; return t; });
 var ATT_byDate = prepareDb(DB.Attendance, function(t) { return t.date; }, function (t) { return t.name; });
+
+var $tag = function (name) { return $("<" + name + "></" + name + ">"); }
+var EF = function (x) { return Enumerable.From(x); };
